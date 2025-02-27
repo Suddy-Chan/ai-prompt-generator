@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     const topicInput = document.getElementById('topic-input');
     const generateBtn = document.getElementById('generate-btn');
     const loadingSpinner = document.getElementById('loading-spinner');
@@ -6,8 +6,55 @@ document.addEventListener('DOMContentLoaded', function() {
     const promptsContainer = document.getElementById('prompts-container');
     const promptCount = document.getElementById('prompt-count');
 
-    // Get API key from config file
-    const geminiApiKey = config.apiKey;
+    // Variable to store the API key
+    let geminiApiKey;
+
+    // Function to get the API key
+    async function getApiKey() {
+        // Check if we're running locally
+        const isLocalDevelopment = window.location.hostname === 'localhost' || 
+                                  window.location.hostname === '127.0.0.1' ||
+                                  window.location.protocol === 'file:';
+        
+        if (isLocalDevelopment) {
+            // For local development, prompt the user for their API key
+            // and store it in localStorage
+            let localKey = localStorage.getItem('geminiApiKey');
+            
+            if (!localKey) {
+                localKey = prompt('Please enter your Gemini API key for local development:');
+                if (localKey) {
+                    localStorage.setItem('geminiApiKey', localKey);
+                }
+            }
+            
+            return localKey;
+        } else {
+            // In production, use the Netlify function
+            try {
+                const response = await fetch('/.netlify/functions/get-api-key');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch API key');
+                }
+                const data = await response.json();
+                return data.apiKey;
+            } catch (error) {
+                console.error('Error fetching API key:', error);
+                return null;
+            }
+        }
+    }
+
+    // Get the API key when the page loads
+    try {
+        geminiApiKey = await getApiKey();
+        if (!geminiApiKey) {
+            throw new Error('API key not available');
+        }
+    } catch (error) {
+        console.error('Error initializing API key:', error);
+        alert('Please provide a valid API key to use this application.');
+    }
 
     // Main function to generate prompts
     function generatePrompts(topic) {
@@ -25,6 +72,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to generate prompts using Gemini API
     async function generatePromptsWithGemini(topic) {
         try {
+            // Check if API key is available
+            if (!geminiApiKey) {
+                // Try to get the API key again
+                geminiApiKey = await getApiKey();
+                if (!geminiApiKey) {
+                    throw new Error('API key not available');
+                }
+            }
+
             // Get the selected number of prompts
             const count = parseInt(promptCount.value);
             
@@ -73,9 +129,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Parse the response and create prompt cards
             const promptLines = generatedText.split('\n').filter(line => line.trim() !== '');
-            
-            // Clear previous results first
-            promptsContainer.innerHTML = '';
             
             // Process only the requested number of prompts
             let processedCount = 0;
@@ -164,90 +217,43 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Function to copy prompt to clipboard
-    window.copyToClipboard = function(button) {
-        const promptText = button.parentElement.querySelector('.prompt-text').textContent;
-        
-        navigator.clipboard.writeText(promptText).then(() => {
-            // Change button text temporarily
-            button.innerHTML = 'Copied!';
-            
-            setTimeout(() => {
-                button.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
-                        <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-                    </svg>
-                    Copy
-                `;
-            }, 2000);
-        }).catch(err => {
-            console.error('Failed to copy text: ', err);
-        });
-    };
-
-    // Get modal elements
-    const aboutModal = document.getElementById('about-modal');
-    const contactModal = document.getElementById('contact-modal');
-
-    // Get the links that open the modals
-    const aboutLink = document.querySelector('footer a[href="#"]');
-    const contactLink = document.querySelector('footer a[href="#"]:last-child');
-
-    // Get the close buttons
-    const closeButtons = document.querySelectorAll('.close-btn');
-
-    // Update the href attributes to prevent page reload
-    aboutLink.setAttribute('href', 'javascript:void(0)');
-    contactLink.setAttribute('href', 'javascript:void(0)');
-
-    // Event listeners for opening modals
-    aboutLink.addEventListener('click', function() {
-        aboutModal.style.display = 'block';
-    });
-
-    contactLink.addEventListener('click', function() {
-        contactModal.style.display = 'block';
-    });
-
-    // Event listeners for closing modals
-    closeButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            aboutModal.style.display = 'none';
-            contactModal.style.display = 'none';
-        });
-    });
-
-    // Close modal when clicking outside of it
-    window.addEventListener('click', function(event) {
-        if (event.target === aboutModal) {
-            aboutModal.style.display = 'none';
-        }
-        if (event.target === contactModal) {
-            contactModal.style.display = 'none';
-        }
-    });
-
-    // Handle contact form submission
-    const contactForm = document.getElementById('contact-form');
-    if (contactForm) {
-        contactForm.addEventListener('submit', function(e) {
+    // Add a button to clear the API key from localStorage (for development)
+    const isLocalDevelopment = window.location.hostname === 'localhost' || 
+                              window.location.hostname === '127.0.0.1' ||
+                              window.location.protocol === 'file:';
+    
+    if (isLocalDevelopment) {
+        const footer = document.querySelector('footer');
+        const clearKeyLink = document.createElement('a');
+        clearKeyLink.href = '#';
+        clearKeyLink.textContent = ' | Reset API Key';
+        clearKeyLink.addEventListener('click', function(e) {
             e.preventDefault();
-            
-            // Get form values
-            const name = document.getElementById('name').value;
-            const email = document.getElementById('email').value;
-            const message = document.getElementById('message').value;
-            
-            // Here you would typically send this data to a server
-            // For now, we'll just show an alert
-            alert(`Thank you, ${name}! Your message has been received. We'll get back to you at ${email} soon.`);
-            
-            // Reset the form
-            contactForm.reset();
-            
-            // Close the modal
-            contactModal.style.display = 'none';
+            localStorage.removeItem('geminiApiKey');
+            alert('API key has been cleared. Refresh the page to enter a new key.');
         });
+        footer.appendChild(clearKeyLink);
     }
 });
+
+// Function to copy prompt to clipboard
+window.copyToClipboard = function(button) {
+    const promptText = button.parentElement.querySelector('.prompt-text').textContent;
+    
+    navigator.clipboard.writeText(promptText).then(() => {
+        // Change button text temporarily
+        button.innerHTML = 'Copied!';
+        
+        setTimeout(() => {
+            button.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                    <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                </svg>
+                Copy
+            `;
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+    });
+};
