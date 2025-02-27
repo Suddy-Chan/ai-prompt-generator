@@ -98,14 +98,30 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Function to generate prompts using Gemini API
     async function generatePromptsWithGemini(topic) {
         try {
-            // First try to use the proxy function if available
+            // Get the selected number of prompts
             const count = parseInt(promptCount.value);
             
-            // Check if we should use direct API call or proxy function
-            if (useProxyFunction) {
+            // Check if we have a valid API key
+            if (!geminiApiKey) {
+                // Try to get the API key again
+                geminiApiKey = await getApiKey();
+                if (!geminiApiKey) {
+                    throw new Error('API key not available');
+                }
+            }
+            
+            // First try to use the Netlify function if we're not in local development
+            const isLocalDevelopment = window.location.hostname === 'localhost' || 
+                                      window.location.hostname === '127.0.0.1' ||
+                                      window.location.protocol === 'file:';
+            
+            let responseData;
+            
+            if (!isLocalDevelopment) {
                 try {
-                    // Use the correct path format for Netlify functions
-                    const response = await fetch('/.netlify/functions/generate-prompts', {
+                    console.log("Attempting to use Netlify function for API call");
+                    // Try to use the Netlify function first
+                    const proxyResponse = await fetch('/.netlify/functions/generate-prompts', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -116,35 +132,22 @@ document.addEventListener('DOMContentLoaded', async function() {
                         })
                     });
                     
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || 'Failed to generate prompts');
+                    if (proxyResponse.ok) {
+                        responseData = await proxyResponse.json();
+                        console.log("Successfully used Netlify function for API call");
+                    } else {
+                        console.log("Netlify function returned error, falling back to direct API call");
+                        // If the function fails, we'll fall back to direct API call below
                     }
-                    
-                    const data = await response.json();
-                    // Process the response...
-                    
                 } catch (proxyError) {
-                    console.error('Error using proxy function, falling back to direct API call:', proxyError);
-                    // Fall back to direct API call
-                    await directApiCall();
+                    console.error('Error using Netlify function, falling back to direct API call:', proxyError);
+                    // We'll fall back to direct API call below
                 }
-            } else {
-                // Use direct API call
-                await directApiCall();
             }
             
-            // Function for direct API call
-            async function directApiCall() {
-                // Check if API key is available
-                if (!geminiApiKey) {
-                    // Try to get the API key again
-                    geminiApiKey = await getApiKey();
-                    if (!geminiApiKey) {
-                        throw new Error('API key not available');
-                    }
-                }
-
+            // If we don't have response data yet, make a direct API call
+            if (!responseData) {
+                console.log("Making direct API call to Gemini");
                 // Updated API URL with gemini-2.0-flash model
                 const apiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
                 
@@ -180,61 +183,71 @@ document.addEventListener('DOMContentLoaded', async function() {
                 
                 if (!response.ok) {
                     const errorData = await response.json();
+                    
+                    // Check if the error is related to an invalid API key
+                    if (response.status === 400 || response.status === 401 || response.status === 403) {
+                        // Clear the invalid API key
+                        localStorage.removeItem('geminiApiKey');
+                        geminiApiKey = null;
+                        updateApiKeyVisibility();
+                        
+                        throw new Error('Invalid API key. Please provide a valid Gemini API key.');
+                    }
+                    
                     throw new Error(errorData.error?.message || 'Failed to generate prompts');
                 }
                 
-                const data = await response.json();
+                responseData = await response.json();
+            }
+            
+            // Extract the generated text
+            const generatedText = responseData.candidates[0].content.parts[0].text;
+            
+            // Parse the response and create prompt cards
+            const promptLines = generatedText.split('\n').filter(line => line.trim() !== '');
+            
+            // Process only the requested number of prompts
+            let processedCount = 0;
+            
+            for (const line of promptLines) {
+                // Extract category and prompt text using regex
+                const categoryMatch = line.match(/^\[([^\]]+)\]/);
+                if (!categoryMatch) continue;
                 
-                // Extract the generated text
-                const generatedText = data.candidates[0].content.parts[0].text;
+                const category = categoryMatch[1].toLowerCase();
+                const prompt = line.substring(categoryMatch[0].length).trim();
                 
-                // Parse the response and create prompt cards
-                const promptLines = generatedText.split('\n').filter(line => line.trim() !== '');
+                // Create prompt card
+                const promptCard = document.createElement('div');
+                promptCard.className = 'prompt-card';
                 
-                // Process only the requested number of prompts
-                let processedCount = 0;
+                promptCard.innerHTML = `
+                    <p class="prompt-text">${prompt}</p>
+                    <p class="prompt-category">Category: ${category.charAt(0).toUpperCase() + category.slice(1)}</p>
+                    <button class="copy-btn" onclick="copyToClipboard(this)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                            <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                        </svg>
+                        Copy
+                    </button>
+                `;
                 
-                for (const line of promptLines) {
-                    // Extract category and prompt text using regex
-                    const categoryMatch = line.match(/^\[([^\]]+)\]/);
-                    if (!categoryMatch) continue;
-                    
-                    const category = categoryMatch[1].toLowerCase();
-                    const prompt = line.substring(categoryMatch[0].length).trim();
-                    
-                    // Create prompt card
-                    const promptCard = document.createElement('div');
-                    promptCard.className = 'prompt-card';
-                    
-                    promptCard.innerHTML = `
-                        <p class="prompt-text">${prompt}</p>
-                        <p class="prompt-category">Category: ${category.charAt(0).toUpperCase() + category.slice(1)}</p>
-                        <button class="copy-btn" onclick="copyToClipboard(this)">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
-                                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-                            </svg>
-                            Copy
-                        </button>
-                    `;
-                    
-                    promptsContainer.appendChild(promptCard);
-                    
-                    processedCount++;
-                    if (processedCount >= count) break; // Stop after processing the requested number of prompts
-                }
+                promptsContainer.appendChild(promptCard);
                 
-                // If we didn't get enough prompts, show an error
-                if (processedCount < count) {
-                    const errorCard = document.createElement('div');
-                    errorCard.className = 'prompt-card error-card';
-                    errorCard.innerHTML = `
-                        <p>We were only able to generate ${processedCount} prompt${processedCount !== 1 ? 's' : ''} instead of the requested ${count}.</p>
-                        <p>Please try again or try a different topic.</p>
-                    `;
-                    promptsContainer.appendChild(errorCard);
-                }
-                
+                processedCount++;
+                if (processedCount >= count) break; // Stop after processing the requested number of prompts
+            }
+            
+            // If we didn't get enough prompts, show an error
+            if (processedCount < count) {
+                const errorCard = document.createElement('div');
+                errorCard.className = 'prompt-card error-card';
+                errorCard.innerHTML = `
+                    <p>We were only able to generate ${processedCount} prompt${processedCount !== 1 ? 's' : ''} instead of the requested ${count}.</p>
+                    <p>Please try again or try a different topic.</p>
+                `;
+                promptsContainer.appendChild(errorCard);
             }
             
         } catch (error) {
