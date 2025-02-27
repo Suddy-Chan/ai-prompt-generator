@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Prompt Generator</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI Prompt Generator</h1>
+            <p class="subtitle">Generate creative AI prompts for any topic</p>
+        </header>
+
+        <main>
+            <div class="input-section">
+                <input type="text" id="topic-input" placeholder="Enter a topic (e.g., space exploration, cooking, fantasy)">
+                <button id="generate-btn">Generate Prompts</button>
+            </div>
+
+            <div class="loading-spinner" id="loading-spinner">
+                <div class="spinner"></div>
+            </div>
+
+            <div class="results-section" id="results-section">
+                <h2>Generated Prompts</h2>
+                <div class="prompts-container" id="prompts-container">
+                    <!-- Prompts will be inserted here -->
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>© 2023 AI Prompt Generator | <a href="#">About</a> | <a href="#">Contact</a></p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
