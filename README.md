@@ -34,40 +34,6 @@ A web application that generates creative AI prompts for any topic using Google'
 
 4. To reset your API key at any time, click the "Reset API Key" link in the footer.
 
-### Deploying to Netlify
-
-1. Create the necessary files for Netlify deployment:
-
-   Create a `netlify.toml` file in the project root:
-   ```toml
-   [build]
-     functions = "netlify/functions"
-   ```
-
-   Create a directory for Netlify functions:
-   ```
-   mkdir -p netlify/functions
-   ```
-
-   Create a function to securely access your API key:
-   ```javascript
-   // netlify/functions/get-api-key.js
-   exports.handler = async function(event, context) {
-     return {
-       statusCode: 200,
-       body: JSON.stringify({
-         apiKey: process.env.GEMINI_API_KEY
-       })
-     };
-   };
-   ```
-
-2. Deploy to Netlify:
-   - Connect your GitHub repository to Netlify
-   - Add your Gemini API key as an environment variable:
-     - Go to Site settings > Build & deploy > Environment
-     - Add a variable named `GEMINI_API_KEY` with your API key as the value
-
 ## How It Works
 
 1. Enter a topic in the input field
