@@ -310,6 +310,75 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
         footer.appendChild(clearKeyLink);
     }
+
+    // Get modal elements
+    const aboutModal = document.getElementById('about-modal');
+    const contactModal = document.getElementById('contact-modal');
+
+    // Get the links that open the modals
+    const aboutLink = document.querySelector('footer a[href="#"]');
+    const contactLink = document.querySelector('footer a[href="#"]:last-child');
+
+    // Get the close buttons
+    const closeButtons = document.querySelectorAll('.close-btn');
+
+    // Update the href attributes to prevent page reload
+    if (aboutLink) aboutLink.setAttribute('href', 'javascript:void(0)');
+    if (contactLink) contactLink.setAttribute('href', 'javascript:void(0)');
+
+    // Event listeners for opening modals
+    if (aboutLink) {
+        aboutLink.addEventListener('click', function() {
+            aboutModal.style.display = 'block';
+        });
+    }
+
+    if (contactLink) {
+        contactLink.addEventListener('click', function() {
+            contactModal.style.display = 'block';
+        });
+    }
+
+    // Event listeners for closing modals
+    closeButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            aboutModal.style.display = 'none';
+            contactModal.style.display = 'none';
+        });
+    });
+
+    // Close modal when clicking outside of it
+    window.addEventListener('click', function(event) {
+        if (event.target === aboutModal) {
+            aboutModal.style.display = 'none';
+        }
+        if (event.target === contactModal) {
+            contactModal.style.display = 'none';
+        }
+    });
+
+    // Handle contact form submission
+    const contactForm = document.getElementById('contact-form');
+    if (contactForm) {
+        contactForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form values
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const message = document.getElementById('message').value;
+            
+            // Here you would typically send this data to a server
+            // For now, we'll just show an alert
+            alert(`Thank you, ${name}! Your message has been received. We'll get back to you at ${email} soon.`);
+            
+            // Reset the form
+            contactForm.reset();
+            
+            // Close the modal
+            contactModal.style.display = 'none';
+        });
+    }
 });
 
 // Function to copy prompt to clipboard
