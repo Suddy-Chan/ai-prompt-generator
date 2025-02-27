@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const loadingSpinner = document.getElementById('loading-spinner');
     const resultsSection = document.getElementById('results-section');
     const promptsContainer = document.getElementById('prompts-container');
+    const promptCount = document.getElementById('prompt-count');
 
     // Get API key from config file
     const geminiApiKey = config.apiKey;
@@ -24,6 +25,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to generate prompts using Gemini API
     async function generatePromptsWithGemini(topic) {
         try {
+            // Get the selected number of prompts
+            const count = parseInt(promptCount.value);
+            
             // Updated API URL with gemini-2.0-flash model
             const apiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
             
@@ -37,10 +41,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         {
                             parts: [
                                 {
-                                    text: `Generate 8 creative and diverse prompts about "${topic}". 
-                                    Include a mix of creative, educational, professional, and entertainment prompts. 
+                                    text: `Generate EXACTLY ${count} creative and diverse prompt${count > 1 ? 's' : ''} about "${topic}". 
+                                    ${count > 1 ? 'Include a mix of creative, educational, professional, and entertainment prompts.' : ''}
                                     Format each prompt on a new line with the category in [BRACKETS] at the beginning.
-                                    Make each prompt detailed and specific.`
+                                    Make each prompt detailed and specific.
+                                    IMPORTANT: You must generate EXACTLY ${count} prompt${count > 1 ? 's' : ''}, no more and no less.`
                                 }
                             ]
                         }
@@ -69,10 +74,16 @@ document.addEventListener('DOMContentLoaded', function() {
             // Parse the response and create prompt cards
             const promptLines = generatedText.split('\n').filter(line => line.trim() !== '');
             
-            promptLines.forEach(line => {
+            // Clear previous results first
+            promptsContainer.innerHTML = '';
+            
+            // Process only the requested number of prompts
+            let processedCount = 0;
+            
+            for (const line of promptLines) {
                 // Extract category and prompt text using regex
                 const categoryMatch = line.match(/^\[([^\]]+)\]/);
-                if (!categoryMatch) return;
+                if (!categoryMatch) continue;
                 
                 const category = categoryMatch[1].toLowerCase();
                 const prompt = line.substring(categoryMatch[0].length).trim();
@@ -94,7 +105,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
                 
                 promptsContainer.appendChild(promptCard);
-            });
+                
+                processedCount++;
+                if (processedCount >= count) break; // Stop after processing the requested number of prompts
+            }
+            
+            // If we didn't get enough prompts, show an error
+            if (processedCount < count) {
+                const errorCard = document.createElement('div');
+                errorCard.className = 'prompt-card error-card';
+                errorCard.innerHTML = `
+                    <p>We were only able to generate ${processedCount} prompt${processedCount !== 1 ? 's' : ''} instead of the requested ${count}.</p>
+                    <p>Please try again or try a different topic.</p>
+                `;
+                promptsContainer.appendChild(errorCard);
+            }
             
         } catch (error) {
             console.error('Error generating prompts with AI:', error);
@@ -160,4 +185,69 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Failed to copy text: ', err);
         });
     };
+
+    // Get modal elements
+    const aboutModal = document.getElementById('about-modal');
+    const contactModal = document.getElementById('contact-modal');
+
+    // Get the links that open the modals
+    const aboutLink = document.querySelector('footer a[href="#"]');
+    const contactLink = document.querySelector('footer a[href="#"]:last-child');
+
+    // Get the close buttons
+    const closeButtons = document.querySelectorAll('.close-btn');
+
+    // Update the href attributes to prevent page reload
+    aboutLink.setAttribute('href', 'javascript:void(0)');
+    contactLink.setAttribute('href', 'javascript:void(0)');
+
+    // Event listeners for opening modals
+    aboutLink.addEventListener('click', function() {
+        aboutModal.style.display = 'block';
+    });
+
+    contactLink.addEventListener('click', function() {
+        contactModal.style.display = 'block';
+    });
+
+    // Event listeners for closing modals
+    closeButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            aboutModal.style.display = 'none';
+            contactModal.style.display = 'none';
+        });
+    });
+
+    // Close modal when clicking outside of it
+    window.addEventListener('click', function(event) {
+        if (event.target === aboutModal) {
+            aboutModal.style.display = 'none';
+        }
+        if (event.target === contactModal) {
+            contactModal.style.display = 'none';
+        }
+    });
+
+    // Handle contact form submission
+    const contactForm = document.getElementById('contact-form');
+    if (contactForm) {
+        contactForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form values
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const message = document.getElementById('message').value;
+            
+            // Here you would typically send this data to a server
+            // For now, we'll just show an alert
+            alert(`Thank you, ${name}! Your message has been received. We'll get back to you at ${email} soon.`);
+            
+            // Reset the form
+            contactForm.reset();
+            
+            // Close the modal
+            contactModal.style.display = 'none';
+        });
+    }
 });
