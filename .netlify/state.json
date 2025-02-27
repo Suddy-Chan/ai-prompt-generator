@@ -1,0 +1,19 @@
+{
+	"geolocation": {
+		"data": {
+			"city": "Ma On Shan",
+			"country": {
+				"code": "HK",
+				"name": "Hong Kong"
+			},
+			"subdivision": {
+				"code": "NST",
+				"name": "Sha Tin"
+			},
+			"timezone": "Asia/Hong_Kong",
+			"latitude": 22.3984,
+			"longitude": 114.2362
+		},
+		"timestamp": 1740680126077
+	}
+}
