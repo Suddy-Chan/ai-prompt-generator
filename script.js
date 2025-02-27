@@ -30,16 +30,42 @@ document.addEventListener('DOMContentLoaded', async function() {
             
             return localKey;
         } else {
-            // In production, use the Netlify function
+            // In production, use the Netlify function with the correct path
             try {
+                console.log("Fetching API key from Netlify function...");
+                // Use the correct path format for Netlify functions
                 const response = await fetch('/.netlify/functions/get-api-key');
+                
+                // Log the response status to help with debugging
+                console.log("Function response status:", response.status);
+                
                 if (!response.ok) {
-                    throw new Error('Failed to fetch API key');
+                    const errorData = await response.json();
+                    console.error("Error response from function:", errorData);
+                    throw new Error(errorData.error || 'Failed to fetch API key from server');
                 }
+                
                 const data = await response.json();
+                
+                // Validate that we actually got an API key
+                if (!data.apiKey) {
+                    console.error("No API key in response:", data);
+                    throw new Error('API key not provided by server');
+                }
+                
+                console.log("Successfully retrieved API key from function");
                 return data.apiKey;
             } catch (error) {
                 console.error('Error fetching API key:', error);
+                
+                // If we can't get the API key from the function, fall back to localStorage
+                const localKey = localStorage.getItem('geminiApiKey');
+                if (localKey) {
+                    console.log("Using API key from localStorage as fallback");
+                    return localKey;
+                }
+                
+                // If no key in localStorage either, return null
                 return null;
             }
         }
@@ -72,106 +98,143 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Function to generate prompts using Gemini API
     async function generatePromptsWithGemini(topic) {
         try {
-            // Check if API key is available
-            if (!geminiApiKey) {
-                // Try to get the API key again
-                geminiApiKey = await getApiKey();
-                if (!geminiApiKey) {
-                    throw new Error('API key not available');
-                }
-            }
-
-            // Get the selected number of prompts
+            // First try to use the proxy function if available
             const count = parseInt(promptCount.value);
             
-            // Updated API URL with gemini-2.0-flash model
-            const apiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
-            
-            const requestOptions = {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    contents: [
-                        {
-                            parts: [
-                                {
-                                    text: `Generate EXACTLY ${count} creative and diverse prompt${count > 1 ? 's' : ''} about "${topic}". 
-                                    ${count > 1 ? 'Include a mix of creative, educational, professional, and entertainment prompts.' : ''}
-                                    Format each prompt on a new line with the category in [BRACKETS] at the beginning.
-                                    Make each prompt detailed and specific.
-                                    IMPORTANT: You must generate EXACTLY ${count} prompt${count > 1 ? 's' : ''}, no more and no less.`
-                                }
-                            ]
-                        }
-                    ],
-                    generationConfig: {
-                        temperature: 0.8,
-                        topP: 0.95,
-                        maxOutputTokens: 800
+            // Check if we should use direct API call or proxy function
+            if (useProxyFunction) {
+                try {
+                    // Use the correct path format for Netlify functions
+                    const response = await fetch('/.netlify/functions/generate-prompts', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            topic: topic,
+                            count: count
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to generate prompts');
                     }
-                })
-            };
-            
-            // Make the API request
-            const response = await fetch(`${apiUrl}?key=${geminiApiKey}`, requestOptions);
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error?.message || 'Failed to generate prompts');
+                    
+                    const data = await response.json();
+                    // Process the response...
+                    
+                } catch (proxyError) {
+                    console.error('Error using proxy function, falling back to direct API call:', proxyError);
+                    // Fall back to direct API call
+                    await directApiCall();
+                }
+            } else {
+                // Use direct API call
+                await directApiCall();
             }
             
-            const data = await response.json();
-            
-            // Extract the generated text
-            const generatedText = data.candidates[0].content.parts[0].text;
-            
-            // Parse the response and create prompt cards
-            const promptLines = generatedText.split('\n').filter(line => line.trim() !== '');
-            
-            // Process only the requested number of prompts
-            let processedCount = 0;
-            
-            for (const line of promptLines) {
-                // Extract category and prompt text using regex
-                const categoryMatch = line.match(/^\[([^\]]+)\]/);
-                if (!categoryMatch) continue;
+            // Function for direct API call
+            async function directApiCall() {
+                // Check if API key is available
+                if (!geminiApiKey) {
+                    // Try to get the API key again
+                    geminiApiKey = await getApiKey();
+                    if (!geminiApiKey) {
+                        throw new Error('API key not available');
+                    }
+                }
+
+                // Updated API URL with gemini-2.0-flash model
+                const apiUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent';
                 
-                const category = categoryMatch[1].toLowerCase();
-                const prompt = line.substring(categoryMatch[0].length).trim();
+                const requestOptions = {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contents: [
+                            {
+                                parts: [
+                                    {
+                                        text: `Generate EXACTLY ${count} creative and diverse prompt${count > 1 ? 's' : ''} about "${topic}". 
+                                        ${count > 1 ? 'Include a mix of creative, educational, professional, and entertainment prompts.' : ''}
+                                        Format each prompt on a new line with the category in [BRACKETS] at the beginning.
+                                        Make each prompt detailed and specific.
+                                        IMPORTANT: You must generate EXACTLY ${count} prompt${count > 1 ? 's' : ''}, no more and no less.`
+                                    }
+                                ]
+                            }
+                        ],
+                        generationConfig: {
+                            temperature: 0.8,
+                            topP: 0.95,
+                            maxOutputTokens: 800
+                        }
+                    })
+                };
                 
-                // Create prompt card
-                const promptCard = document.createElement('div');
-                promptCard.className = 'prompt-card';
+                // Make the API request
+                const response = await fetch(`${apiUrl}?key=${geminiApiKey}`, requestOptions);
                 
-                promptCard.innerHTML = `
-                    <p class="prompt-text">${prompt}</p>
-                    <p class="prompt-category">Category: ${category.charAt(0).toUpperCase() + category.slice(1)}</p>
-                    <button class="copy-btn" onclick="copyToClipboard(this)">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
-                            <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
-                        </svg>
-                        Copy
-                    </button>
-                `;
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || 'Failed to generate prompts');
+                }
                 
-                promptsContainer.appendChild(promptCard);
+                const data = await response.json();
                 
-                processedCount++;
-                if (processedCount >= count) break; // Stop after processing the requested number of prompts
-            }
-            
-            // If we didn't get enough prompts, show an error
-            if (processedCount < count) {
-                const errorCard = document.createElement('div');
-                errorCard.className = 'prompt-card error-card';
-                errorCard.innerHTML = `
-                    <p>We were only able to generate ${processedCount} prompt${processedCount !== 1 ? 's' : ''} instead of the requested ${count}.</p>
-                    <p>Please try again or try a different topic.</p>
-                `;
-                promptsContainer.appendChild(errorCard);
+                // Extract the generated text
+                const generatedText = data.candidates[0].content.parts[0].text;
+                
+                // Parse the response and create prompt cards
+                const promptLines = generatedText.split('\n').filter(line => line.trim() !== '');
+                
+                // Process only the requested number of prompts
+                let processedCount = 0;
+                
+                for (const line of promptLines) {
+                    // Extract category and prompt text using regex
+                    const categoryMatch = line.match(/^\[([^\]]+)\]/);
+                    if (!categoryMatch) continue;
+                    
+                    const category = categoryMatch[1].toLowerCase();
+                    const prompt = line.substring(categoryMatch[0].length).trim();
+                    
+                    // Create prompt card
+                    const promptCard = document.createElement('div');
+                    promptCard.className = 'prompt-card';
+                    
+                    promptCard.innerHTML = `
+                        <p class="prompt-text">${prompt}</p>
+                        <p class="prompt-category">Category: ${category.charAt(0).toUpperCase() + category.slice(1)}</p>
+                        <button class="copy-btn" onclick="copyToClipboard(this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
+                                <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                            </svg>
+                            Copy
+                        </button>
+                    `;
+                    
+                    promptsContainer.appendChild(promptCard);
+                    
+                    processedCount++;
+                    if (processedCount >= count) break; // Stop after processing the requested number of prompts
+                }
+                
+                // If we didn't get enough prompts, show an error
+                if (processedCount < count) {
+                    const errorCard = document.createElement('div');
+                    errorCard.className = 'prompt-card error-card';
+                    errorCard.innerHTML = `
+                        <p>We were only able to generate ${processedCount} prompt${processedCount !== 1 ? 's' : ''} instead of the requested ${count}.</p>
+                        <p>Please try again or try a different topic.</p>
+                    `;
+                    promptsContainer.appendChild(errorCard);
+                }
+                
             }
             
         } catch (error) {
