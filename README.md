@@ -12,7 +12,7 @@ A web application that generates creative AI prompts for any topic using Google'
 
 ## Demo
 
-[Live Demo](https://your-netlify-site-url.netlify.app)
+[Live Demo](https://ai-prompt-generator-2025.netlify.app/)
 
 ## Setup and Installation
 
